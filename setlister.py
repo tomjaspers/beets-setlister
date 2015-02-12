@@ -27,7 +27,13 @@ import os
 import requests
 
 
-def _find_item_in_lib(lib, track_name, artist_name=None):
+def _find_item_in_lib(lib, track_name, artist_name):
+    """Finds an Item in the library based on the track_name.
+
+    The track_name is not guaranteed to be perfect (i.e. as soon on MB),
+    so in that case we query MB and look for the track id and query our
+    lib with that.
+    """
     # Query the library based on the track name
     query = MatchQuery(field='title', pattern=track_name)
     lib_results = lib._fetch(Item, query=query)
@@ -46,61 +52,111 @@ def _find_item_in_lib(lib, track_name, artist_name=None):
     # TODO: Handle situation where lib_results might contain multiple Items
     return lib_results[0]
 
+
+def _save_playlist(m3u_path, items):
+    """Saves a list of Items as a playlist at m3u_path
+    """
+    mkdirall(m3u_path)
+    with open(syspath(m3u_path), 'w') as f:
+        for item in items:
+            f.write(item.path + b'\n')
+
+
 requests_session = requests.Session()
 requests_session.headers = {'User-Agent': 'beets'}
 SETLISTFM_ENDPOINT = 'http://api.setlist.fm/rest/0.1/search/setlists.json'
+
+
+def _get_setlist(artist_name):
+    """Query setlist.fm for an artist and return the first
+    complete setlist, alongside some information about the event
+    """
+    venue_name = None
+    event_date = None
+    track_names = []
+
+    # Query setlistfm using the artist_name
+    response = requests_session.get(SETLISTFM_ENDPOINT, params={
+               'artistName': artist_name,
+               })
+
+    # Setlist.fm can have some events with empty setlists
+    # We'll just pick the first event with a non-empty setlist
+    results = response.json()
+    setlists = results['setlists']['setlist']
+    for setlist in setlists:
+        sets = setlist['sets']
+        if len(sets) > 0:
+            artist_name = setlist['artist']['@name']
+            event_date = setlist['@eventDate']
+            venue_name = setlist['venue']['@name']
+            for subset in sets['set']:
+                for song in subset['song']:
+                    track_names += [song['@name']]
+            break  # Stop because we have found a setlist
+
+    return {'artist_name': artist_name,
+            'venue_name': venue_name,
+            'event_date': event_date,
+            'track_names': track_names}
 
 
 class SetlisterPlugin(BeetsPlugin):
     def __init__(self):
         super(SetlisterPlugin, self).__init__()
         self.config.add({
-            'playlist_dir': u'~/Music/setlisttest',
+            'playlist_dir': None,
         })
 
-    def create_playlist(self, lib, artist_name):
+    def setlister(self, lib, artist_name):
+        """Glue everything together
+        """
+        if not self.config['playlist_dir']:
+            self._log.warning(u'You have to configure a playlist_dir')
+            return
+
         if isinstance(artist_name, list):
             artist_name = artist_name[0]
 
-        # Query setlistfm using the artist_name
-        response = requests_session.get(SETLISTFM_ENDPOINT, params={
-            'artistName': artist_name,
-            })
-
         # Extract setlist information from setlist.fm
-        setlist_name = None
-        setlist_tracks = []
-        # Get results using JSON
         try:
-            results = response.json()
-            # Find the first proper setlist
-            setlists = results['setlists']['setlist']
-            for setlist in setlists:
-                sets = setlist['sets']
-                # setlist.fm can give back events with empty setlists
-                if len(sets) > 0:
-                    setlist_name = u'{0} at {1}'.format(
-                        setlist['artist']['@name'],
-                        setlist['@eventDate'])
-                    for subset in sets['set']:
-                        for song in subset['song']:
-                            setlist_tracks += [song['@name']]
-                    # We can stop because we have found a setlist
-                    break
+            setlist = _get_setlist(artist_name)
         except Exception:
             self._log.debug(u'error scraping setlist.fm for {0}'.format(
                             artist_name))
-
-        if not setlist_tracks:
-            self._log.info(u'No setlist found')
             return
 
-        # Create a playlist for the found setlist
+        if not setlist['track_names']:
+            self._log.info(u'could not find a setlist for {0}'.format(
+                           artist_name))
+            return
+
+        setlist_name = u'{0} at {1} ({2})'.format(
+                        setlist['artist_name'],
+                        setlist['venue_name'],
+                        setlist['event_date'])
+
         self._log.info(u'Setlist: {0} ({1} tracks)'.format(
-                        setlist_name, len(setlist_tracks)))
-        items = []
-        missing_items = []
-        for track_nr, track_name in enumerate(setlist_tracks):
+                        setlist_name, len(setlist['track_names'])))
+
+        # Match the setlist' tracks with items in our library
+        items, _ = self.find_items_in_lib(lib,
+                                          setlist['track_names'],
+                                          artist_name)
+
+        # Save the items as a playlist
+        m3u_path = normpath(os.path.join(
+                                self.config['playlist_dir'].as_filename(),
+                                setlist_name + '.m3u'))
+        _save_playlist(m3u_path, items)
+        self._log.info(u'Saved playlist at "{0}"'.format(m3u_path))
+
+    def find_items_in_lib(self, lib, track_names, artist_name):
+        """Returns a list of items found, and list of items not found in library
+        from a given list of track names.
+        """
+        items, missing_items = [], []
+        for track_nr, track_name in enumerate(track_names):
             item = _find_item_in_lib(lib, track_name, artist_name)
             if item:
                 items += [item]
@@ -110,25 +166,15 @@ class SetlisterPlugin(BeetsPlugin):
                 message = ui.colorize('text_error', u'not found')
             self._log.info("{0} {1}: {2}".format(
                           (track_nr+1), track_name, message))
-
-        # Create and save the playlist
-        m3u_name = setlist_name + '.m3u'
-        m3u_path = normpath(os.path.join(
-                                self.config['playlist_dir'].as_filename(),
-                                m3u_name))
-        mkdirall(m3u_path)
-        with open(syspath(m3u_path), 'w') as f:
-            for item in items:
-                f.write(item.path + b'\n')
-        self._log.info(u'Saved playlist at "{0}"'.format(m3u_path))
+        return items, missing_items
 
     def commands(self):
         def create(lib, opts, args):
-            self.create_playlist(lib, ui.decargs(args))
+            self.setlister(lib, ui.decargs(args))
 
         setlist_cmd = ui.Subcommand(
             'setlister',
-            help='create playlist from an artists\' setlist'
+            help='create playlist from an artists\' latest setlist'
         )
 
         setlist_cmd.func = create
