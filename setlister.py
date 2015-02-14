@@ -21,10 +21,31 @@ from __future__ import (division, absolute_import, print_function,
 from beets.plugins import BeetsPlugin
 from beets import ui
 from beets.library import Item
-from beets.dbcore.query import MatchQuery
+from beets.dbcore.query import AndQuery, OrQuery, MatchQuery
 from beets.util import mkdirall, normpath, syspath
+import beets.autotag.hooks as hooks
 import os
 import requests
+
+
+def _get_mb_candidate(track_name, artist_name):
+    def calc_distance(track_info):
+        dist = hooks.Distance()
+
+        dist.add_string('track_title', track_name, track_info.title)
+
+        if track_info.artist:
+            dist.add_string('track_artist', artist_name, track_info.artist)
+
+        return dist.distance
+
+    candidates = hooks.item_candidates(Item(), artist_name, track_name)
+    matches = [(c, calc_distance(c)) for c in candidates]
+    matches.sort(key=lambda match: match[1])
+
+    best_match = matches[0]
+
+    return best_match[0] if best_match[1] <= 0.2 else None
 
 
 def _find_item_in_lib(lib, track_name, artist_name):
@@ -35,16 +56,22 @@ def _find_item_in_lib(lib, track_name, artist_name):
     lib with that.
     """
     # Query the library based on the track name
-    query = MatchQuery(field='title', pattern=track_name)
+    query = MatchQuery('title', track_name)
     lib_results = lib._fetch(Item, query=query)
 
     # Maybe the provided track name isn't all too good
     # Search for the track on MusicBrainz, and use that info to retry our lib
     if not lib_results:
-        # TODO: Search track name on MusicBrainz
-        mb_candidates = None
-        if mb_candidates:
-            pass
+        mb_candidate = _get_mb_candidate(track_name, artist_name)
+        if mb_candidate:
+            query = OrQuery((
+                        AndQuery((
+                            MatchQuery('title', mb_candidate.title),
+                            MatchQuery('artist', mb_candidate.artist),
+                        )),
+                        MatchQuery('mb_trackid', mb_candidate.track_id)
+                    ))
+            lib_results = lib._fetch(Item, query=query)
 
     if not lib_results:
         return None
@@ -117,6 +144,10 @@ class SetlisterPlugin(BeetsPlugin):
 
         if isinstance(artist_name, list):
             artist_name = artist_name[0]
+
+        if not artist_name:
+            self._log.warning(u'You have to provide an artist')
+            return
 
         # Extract setlist information from setlist.fm
         try:
