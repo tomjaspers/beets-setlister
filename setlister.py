@@ -1,4 +1,3 @@
-# This file is part of beets.
 # Copyright 2015, Tom Jaspers <contact@tomjaspers.be>.
 #
 # Permission is hereby granted, free of charge, to any person obtaining
@@ -28,24 +27,30 @@ import os
 import requests
 
 
-def _get_mb_candidate(track_name, artist_name):
-    def calc_distance(track_info):
-        dist = hooks.Distance()
+def _get_best_match(items, track_name, artist_name):
+    def calc_distance(track_info, track_name, artist_name):
+            dist = hooks.Distance()
 
-        dist.add_string('track_title', track_name, track_info.title)
+            dist.add_string('track_title', track_name, track_info.title)
 
-        if track_info.artist:
-            dist.add_string('track_artist', artist_name, track_info.artist)
+            if track_info.artist:
+                dist.add_string('track_artist',
+                                artist_name,
+                                track_info.artist)
 
-        return dist.distance
+            return dist.distance
 
-    candidates = hooks.item_candidates(Item(), artist_name, track_name)
-    matches = [(c, calc_distance(c)) for c in candidates]
+    matches = [(i, calc_distance(i, track_name, artist_name)) for i in items]
     matches.sort(key=lambda match: match[1])
 
-    best_match = matches[0]
+    return matches[0]
 
-    return best_match[0] if best_match[1] <= 0.2 else None
+
+def _get_mb_candidate(track_name, artist_name, threshold=0.2):
+    candidates = hooks.item_candidates(Item(), artist_name, track_name)
+    best_match = _get_best_match(candidates, track_name, artist_name)
+
+    return best_match[0] if best_match[1] <= threshold else None
 
 
 def _find_item_in_lib(lib, track_name, artist_name):
@@ -76,7 +81,11 @@ def _find_item_in_lib(lib, track_name, artist_name):
     if not lib_results:
         return None
 
-    # TODO: Handle situation where lib_results might contain multiple Items
+    # If we get multiple Item results from our library, choose best match
+    # using the distance
+    if len(lib_results) > 1:
+        return _get_best_match(lib_results)[0]
+
     return lib_results[0]
 
 
