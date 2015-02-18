@@ -84,7 +84,7 @@ def _find_item_in_lib(lib, track_name, artist_name):
     # If we get multiple Item results from our library, choose best match
     # using the distance
     if len(lib_results) > 1:
-        return _get_best_match(lib_results)[0]
+        return _get_best_match(lib_results, track_name, artist_name)[0]
 
     return lib_results[0]
 
@@ -103,7 +103,7 @@ requests_session.headers = {'User-Agent': 'beets'}
 SETLISTFM_ENDPOINT = 'http://api.setlist.fm/rest/0.1/search/setlists.json'
 
 
-def _get_setlist(artist_name):
+def _get_setlist(artist_name, date=None):
     """Query setlist.fm for an artist and return the first
     complete setlist, alongside some information about the event
     """
@@ -114,12 +114,18 @@ def _get_setlist(artist_name):
     # Query setlistfm using the artist_name
     response = requests_session.get(SETLISTFM_ENDPOINT, params={
                'artistName': artist_name,
+               'date': date,
                })
+
+    if not response.status_code == 200:
+        return
 
     # Setlist.fm can have some events with empty setlists
     # We'll just pick the first event with a non-empty setlist
     results = response.json()
     setlists = results['setlists']['setlist']
+    if not isinstance(setlists, list):
+        setlists = [setlists]
     for setlist in setlists:
         sets = setlist['sets']
         if len(sets) > 0:
@@ -144,15 +150,16 @@ class SetlisterPlugin(BeetsPlugin):
             'playlist_dir': None,
         })
 
-    def setlister(self, lib, artist_name):
+    def setlister(self, lib, artist_name, date=None):
         """Glue everything together
         """
         if not self.config['playlist_dir']:
             self._log.warning(u'You have to configure a playlist_dir')
             return
 
+        # Support `$ beet setlister red hot chili peppers`
         if isinstance(artist_name, list):
-            artist_name = artist_name[0]
+            artist_name = ' '.join(artist_name)
 
         if not artist_name:
             self._log.warning(u'You have to provide an artist')
@@ -160,13 +167,13 @@ class SetlisterPlugin(BeetsPlugin):
 
         # Extract setlist information from setlist.fm
         try:
-            setlist = _get_setlist(artist_name)
+            setlist = _get_setlist(artist_name, date)
         except Exception:
             self._log.debug(u'error scraping setlist.fm for {0}'.format(
                             artist_name))
             return
 
-        if not setlist['track_names']:
+        if not setlist or not setlist['track_names']:
             self._log.info(u'could not find a setlist for {0}'.format(
                            artist_name))
             return
@@ -209,14 +216,16 @@ class SetlisterPlugin(BeetsPlugin):
         return items, missing_items
 
     def commands(self):
-        def create(lib, opts, args):
-            self.setlister(lib, ui.decargs(args))
+        def func(lib, opts, args):
+            self.setlister(lib, ui.decargs(args), opts.date)
 
-        setlist_cmd = ui.Subcommand(
+        cmd = ui.Subcommand(
             'setlister',
             help='create playlist from an artists\' latest setlist'
         )
+        cmd.parser.add_option('-d', '--date', dest='date', default=None,
+                              help='setlist of a specific date (dd-MM-yyyy)')
 
-        setlist_cmd.func = create
+        cmd.func = func
 
-        return [setlist_cmd]
+        return [cmd]
