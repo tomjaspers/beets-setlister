@@ -28,17 +28,21 @@ import requests
 
 
 def _get_best_match(items, track_name, artist_name):
+    """ Returns the best match (according to a track_name/artist_name distance)
+    from a list of Items
+    """
+
     def calc_distance(track_info, track_name, artist_name):
-            dist = hooks.Distance()
+        dist = hooks.Distance()
 
-            dist.add_string('track_title', track_name, track_info.title)
+        dist.add_string('track_title', track_name, track_info.title)
 
-            if track_info.artist:
-                dist.add_string('track_artist',
-                                artist_name,
-                                track_info.artist)
+        if track_info.artist:
+            dist.add_string('track_artist',
+                            artist_name,
+                            track_info.artist)
 
-            return dist.distance
+        return dist.distance
 
     matches = [(i, calc_distance(i, track_name, artist_name)) for i in items]
     matches.sort(key=lambda match: match[1])
@@ -47,6 +51,8 @@ def _get_best_match(items, track_name, artist_name):
 
 
 def _get_mb_candidate(track_name, artist_name, threshold=0.2):
+    """Returns the best candidate from MusicBrainz for a track_name/artist_name
+    """
     candidates = hooks.item_candidates(Item(), artist_name, track_name)
     best_match = _get_best_match(candidates, track_name, artist_name)
 
@@ -169,7 +175,7 @@ class SetlisterPlugin(BeetsPlugin):
         try:
             setlist = _get_setlist(artist_name, date)
         except Exception:
-            self._log.debug(u'error scraping setlist.fm for {0}'.format(
+            self._log.info(u'error scraping setlist.fm for {0}'.format(
                             artist_name))
             return
 
