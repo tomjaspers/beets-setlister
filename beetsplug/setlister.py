@@ -12,6 +12,7 @@
 # included in all copies or substantial portions of the Software.
 
 """Generates playlists from setlist.fm
+https://github.com/tomjaspers/beets-setlister
 """
 
 from __future__ import (division, absolute_import, print_function,
