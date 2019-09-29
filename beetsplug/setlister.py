@@ -109,6 +109,7 @@ requests_session = requests.Session()
 requests_session.headers = {'User-Agent': 'beets'}
 SETLISTFM_ENDPOINT = 'http://api.setlist.fm/rest/0.1/search/setlists.json'
 
+# todo: setlist.fm API is now at version 1.0; no useable response from old endpoint
 
 def _get_setlist(artist_name, date=None):
     """Query setlist.fm for an artist and return the first
@@ -124,7 +125,7 @@ def _get_setlist(artist_name, date=None):
                'date': date,
                })
 
-    if not response.status_code == 200:
+    if not response.status_code == 200: 
         return
 
     # Setlist.fm can have some events with empty setlists
@@ -143,6 +144,8 @@ def _get_setlist(artist_name, date=None):
                 for song in subset['song']:
                     track_names += [song['@name']]
             break  # Stop because we have found a setlist
+            
+    # todo: querying old API endpoint shows up as 'not found'; not transparent, response for unsuccessful query is probably distinguishable from errors
 
     return {'artist_name': artist_name,
             'venue_name': venue_name,
