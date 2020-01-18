@@ -4,12 +4,14 @@ Plugin for [beets](https://github.com/sampsyo/beets) to generate playlists from 
 
 
 ## Usage
-1. Clone this project, or download setlister.py, in to your configured pluginpath (e.g., `~/.beets`)
+1. Clone this project, or download [setlister.py](beetsplug/setlister.py), in to your configured pluginpath (e.g., `~/.beets`)
 2. Add `setlister` to your configured beets plugins
-3. Configure setlister to know where your playlists have to be placed
+3. Register for a setlist.fm API key [here](https://www.setlist.fm/settings/api)
+4. Configure setlister to know where your playlists have to be placed
 ```yaml
 setlister:
     playlist_dir: ~/Music/setlists
+    api_key: <YOUR API KEY HERE>
 ```
 Now you can run `$ beets setlister artist` to download the artists' latest setlist to your configured playlist directory, or specify the concert date using the `--date` option.
 
@@ -43,6 +45,4 @@ Saved playlist at "/Users/tjs/Music/setlists/alt-J at Zenith (17-02-2015).m3u"
 ## New setlist.fm API
 
 Originally, this plugin used version 0.1 of the setlist.fm API, which was discontinued from 2018 onwards. To use the new API, you have to [register for an API key here](https://www.setlist.fm/settings/api).
-
-
 
