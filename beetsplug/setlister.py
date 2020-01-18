@@ -221,7 +221,7 @@ class SetlisterPlugin(BeetsPlugin):
                                 setlist_name + '.m3u'))
 
         _save_playlist(m3u_path, items)
-        self._log.info(u'Saved playlist at "{0}"'.format(m3u_path))
+        self._log.info(u'Saved playlist at "{0}"'.format(m3u_path.decode('unicode_escape')))
 
     def find_items_in_lib(self, lib, track_names, artist_name):
         """Returns a list of items found, and list of items not found in library
