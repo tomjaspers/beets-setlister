@@ -102,7 +102,7 @@ def _save_playlist(m3u_path, items):
     mkdirall(m3u_path)
     with open(syspath(m3u_path), 'w') as f:
         for item in items:
-            f.write(item.path + b'\n')
+            f.write(item.path.decode('unicode_escape') + u'\n')
 
 
 
@@ -157,12 +157,12 @@ class SetlisterPlugin(BeetsPlugin):
         super(SetlisterPlugin, self).__init__()
         self.config.add({
             'playlist_dir': None,
-            'api_key': '***REMOVED***',
+            'api_key': '',
         })
 
         self.session = requests.Session()
         self.session.headers = {
-            'Accept': 'applicatiton/json',
+            'Accept': 'application/json',
             'User-Agent': 'beets',
             'x-api-key': self.config['api_key'].get(str)
         }
@@ -171,12 +171,13 @@ class SetlisterPlugin(BeetsPlugin):
         """Glue everything together
         """
 
-        if not self.config['playlist_dir']:
-            self._log.warning(u'You have to configure a playlist_dir')
+        if not os.path.isdir(os.path.expanduser(str(self.config['playlist_dir']))):
+            self._log.warning(u'You have to configure a valid `playlist_dir`')
             return
 
         if not self.config['api_key']:
-            self._log.warning(u'You have to provide you setlist.fm API key (https://www.setlist.fm/settings/apps)')
+            self._log.warning(u'You have to provide your setlist.fm API key. Request a key at https://www.setlist.fm/settings/apps and configure it as `api_key` as `api_key`')
+            return
 
         # todo: isn't it more sensible to have the checks above in SetlisterPlugin.__init__?
 
@@ -218,6 +219,7 @@ class SetlisterPlugin(BeetsPlugin):
         m3u_path = normpath(os.path.join(
                                 self.config['playlist_dir'].as_filename(),
                                 setlist_name + '.m3u'))
+
         _save_playlist(m3u_path, items)
         self._log.info(u'Saved playlist at "{0}"'.format(m3u_path))
 
