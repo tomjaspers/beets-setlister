@@ -102,7 +102,7 @@ def _save_playlist(m3u_path, items):
     mkdirall(m3u_path)
     with open(syspath(m3u_path), 'w') as f:
         for item in items:
-            f.write(item.path.decode('unicode_escape') + u'\n')
+            f.write(item.path.decode('utf-8') + u'\n')
 
 
 
@@ -221,7 +221,7 @@ class SetlisterPlugin(BeetsPlugin):
                                 setlist_name + '.m3u'))
 
         _save_playlist(m3u_path, items)
-        self._log.info(u'Saved playlist at "{0}"'.format(m3u_path.decode('unicode_escape')))
+        self._log.info(u'Saved playlist at "{0}"'.format(m3u_path.decode('utf-8')))
 
     def find_items_in_lib(self, lib, track_names, artist_name):
         """Returns a list of items found, and list of items not found in library
