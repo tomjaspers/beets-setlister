@@ -108,8 +108,6 @@ def _save_playlist(m3u_path, items):
 
 SETLISTFM_ENDPOINT = 'https://api.setlist.fm/rest/1.0/search/setlists'
 
-# todo: setlist.fm API is now at version 1.0; no useable response from old endpoint
-
 def _get_setlist(session, artist_name, date=None):
     """Query setlist.fm for an artist and return the first
     complete setlist, alongside some information about the event
@@ -143,8 +141,6 @@ def _get_setlist(session, artist_name, date=None):
                 for song in subset['song']:
                     track_names += [song['name']]
             break  # Stop because we have found a setlist
-            
-    # todo: querying old API endpoint shows up as 'not found'; not transparent, response for unsuccessful query is probably distinguishable from errors
 
     return {'artist_name': artist_name,
             'venue_name': venue_name,
@@ -160,6 +156,15 @@ class SetlisterPlugin(BeetsPlugin):
             'api_key': '',
         })
 
+        if not os.path.isdir(os.path.expanduser(self.config['playlist_dir'].get(str))):
+            self._log.warning(u'You have to configure a valid `playlist_dir`')
+            return
+
+        if not self.config['api_key']:
+            self._log.warning(u'You have to provide your setlist.fm API key. Request a key at https://www.setlist.fm/settings/apps and configure it as `api_key` as `api_key`')
+            return
+
+
         self.session = requests.Session()
         self.session.headers = {
             'Accept': 'application/json',
@@ -170,16 +175,6 @@ class SetlisterPlugin(BeetsPlugin):
     def setlister(self, lib, artist_name, date=None):
         """Glue everything together
         """
-
-        if not os.path.isdir(os.path.expanduser(str(self.config['playlist_dir']))):
-            self._log.warning(u'You have to configure a valid `playlist_dir`')
-            return
-
-        if not self.config['api_key']:
-            self._log.warning(u'You have to provide your setlist.fm API key. Request a key at https://www.setlist.fm/settings/apps and configure it as `api_key` as `api_key`')
-            return
-
-        # todo: isn't it more sensible to have the checks above in SetlisterPlugin.__init__?
 
         # Support `$ beet setlister red hot chili peppers`
         if isinstance(artist_name, list):
