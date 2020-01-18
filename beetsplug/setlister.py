@@ -105,13 +105,12 @@ def _save_playlist(m3u_path, items):
             f.write(item.path + b'\n')
 
 
-requests_session = requests.Session()
-requests_session.headers = {'User-Agent': 'beets'}
-SETLISTFM_ENDPOINT = 'http://api.setlist.fm/rest/0.1/search/setlists.json'
+
+SETLISTFM_ENDPOINT = 'https://api.setlist.fm/rest/1.0/search/setlists'
 
 # todo: setlist.fm API is now at version 1.0; no useable response from old endpoint
 
-def _get_setlist(artist_name, date=None):
+def _get_setlist(session, artist_name, date=None):
     """Query setlist.fm for an artist and return the first
     complete setlist, alongside some information about the event
     """
@@ -120,7 +119,7 @@ def _get_setlist(artist_name, date=None):
     track_names = []
 
     # Query setlistfm using the artist_name
-    response = requests_session.get(SETLISTFM_ENDPOINT, params={
+    response = session.get(SETLISTFM_ENDPOINT, params={
                'artistName': artist_name,
                'date': date,
                })
@@ -131,18 +130,18 @@ def _get_setlist(artist_name, date=None):
     # Setlist.fm can have some events with empty setlists
     # We'll just pick the first event with a non-empty setlist
     results = response.json()
-    setlists = results['setlists']['setlist']
+    setlists = results['setlist']
     if not isinstance(setlists, list):
         setlists = [setlists]
     for setlist in setlists:
         sets = setlist['sets']
         if len(sets) > 0:
-            artist_name = setlist['artist']['@name']
-            event_date = setlist['@eventDate']
-            venue_name = setlist['venue']['@name']
+            artist_name = setlist['artist']['name']
+            event_date = setlist['eventDate']
+            venue_name = setlist['venue']['name']
             for subset in sets['set']:
                 for song in subset['song']:
-                    track_names += [song['@name']]
+                    track_names += [song['name']]
             break  # Stop because we have found a setlist
             
     # todo: querying old API endpoint shows up as 'not found'; not transparent, response for unsuccessful query is probably distinguishable from errors
@@ -158,14 +157,28 @@ class SetlisterPlugin(BeetsPlugin):
         super(SetlisterPlugin, self).__init__()
         self.config.add({
             'playlist_dir': None,
+            'api_key': '***REMOVED***',
         })
+
+        self.session = requests.Session()
+        self.session.headers = {
+            'Accept': 'applicatiton/json',
+            'User-Agent': 'beets',
+            'x-api-key': self.config['api_key'].get(str)
+        }
 
     def setlister(self, lib, artist_name, date=None):
         """Glue everything together
         """
+
         if not self.config['playlist_dir']:
             self._log.warning(u'You have to configure a playlist_dir')
             return
+
+        if not self.config['api_key']:
+            self._log.warning(u'You have to provide you setlist.fm API key (https://www.setlist.fm/settings/apps)')
+
+        # todo: isn't it more sensible to have the checks above in SetlisterPlugin.__init__?
 
         # Support `$ beet setlister red hot chili peppers`
         if isinstance(artist_name, list):
@@ -177,7 +190,7 @@ class SetlisterPlugin(BeetsPlugin):
 
         # Extract setlist information from setlist.fm
         try:
-            setlist = _get_setlist(artist_name, date)
+            setlist = _get_setlist(self.session, artist_name, date)
         except Exception:
             self._log.info(u'error scraping setlist.fm for {0}'.format(
                             artist_name))
