@@ -27,6 +27,8 @@ import beets.autotag.hooks as hooks
 import os
 import requests
 
+import subprocess
+
 
 def _get_best_match(items, track_name, artist_name):
     """ Returns the best match (according to a track_name/artist_name distance)
@@ -172,7 +174,7 @@ class SetlisterPlugin(BeetsPlugin):
             'x-api-key': self.config['api_key'].get(str)
         }
 
-    def setlister(self, lib, artist_name, date=None):
+    def setlister(self, lib, artist_name, date=None, play=False):
         """Glue everything together
         """
 
@@ -218,6 +220,10 @@ class SetlisterPlugin(BeetsPlugin):
         _save_playlist(m3u_path, items)
         self._log.info(u'Saved playlist at "{0}"'.format(m3u_path.decode('utf-8')))
 
+        if play:
+            # todo: Double check whether this is sensible ~ beets documentation (it probably isn't)
+            subprocess.Popen(['xdg-open', m3u_path.decode('utf-8')])
+
     def find_items_in_lib(self, lib, track_names, artist_name):
         """Returns a list of items found, and list of items not found in library
         from a given list of track names.
@@ -237,7 +243,7 @@ class SetlisterPlugin(BeetsPlugin):
 
     def commands(self):
         def func(lib, opts, args):
-            self.setlister(lib, ui.decargs(args), opts.date)
+            self.setlister(lib, ui.decargs(args), opts.date, opts.play)
 
         cmd = ui.Subcommand(
             'setlister',
@@ -245,6 +251,8 @@ class SetlisterPlugin(BeetsPlugin):
         )
         cmd.parser.add_option('-d', '--date', dest='date', default=None,
                               help='setlist of a specific date (dd-MM-yyyy)')
+        cmd.parser.add_option('-p', '--play', action='store_true',
+                              help='play the playlist (boolean)')
 
         cmd.func = func
 
