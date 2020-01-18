@@ -105,7 +105,7 @@ def _save_playlist(m3u_path, items):
             f.write(item.path.decode('utf-8') + u'\n')
 
 
-
+# Reference: https://api.setlist.fm/docs/1.0/resource__1.0_search_setlists.html
 SETLISTFM_ENDPOINT = 'https://api.setlist.fm/rest/1.0/search/setlists'
 
 def _get_setlist(session, artist_name, date=None):
