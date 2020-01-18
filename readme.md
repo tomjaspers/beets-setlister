@@ -41,8 +41,3 @@ Setlist: alt-J at Zenith (17-02-2015) (19 tracks)
 Saved playlist at "/Users/tjs/Music/setlists/alt-J at Zenith (17-02-2015).m3u"
 
 ```
-
-## New setlist.fm API
-
-Originally, this plugin used version 0.1 of the setlist.fm API, which was discontinued from 2018 onwards. To use the new API, you have to [register for an API key here](https://www.setlist.fm/settings/api).
-
