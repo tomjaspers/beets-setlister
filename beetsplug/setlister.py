@@ -69,11 +69,14 @@ def _find_item_in_lib(lib, track_name, artist_name):
     so in that case we query MB and look for the track id and query our
     lib with that.
     """
+
+    # todo: sometimes returns matches by other artists when requested artist has no matching tracks
+
     # Query the library based on the track name
     query = MatchQuery('title', track_name)
     lib_results = lib._fetch(Item, query=query)
 
-    # Maybe the provided track name isn't all too good
+    # Maybe the provided track name isn't all too good  todo: fails e.g. for Opeth - Reverie/Harlequin Forest due to mismatch in `/`
     # Search for the track on MusicBrainz, and use that info to retry our lib
     if not lib_results:
         mb_candidate = _get_mb_candidate(track_name, artist_name)
