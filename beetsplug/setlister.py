@@ -70,13 +70,17 @@ def _find_item_in_lib(lib, track_name, artist_name):
     lib with that.
     """
 
-    # todo: sometimes returns matches by other artists when requested artist has no matching tracks
+    # todo: sometimes returns matches by other artists when requested artist
+    # has no matching tracks
 
     # Query the library based on the track name
     query = MatchQuery('title', track_name)
     lib_results = lib._fetch(Item, query=query)
 
-    # Maybe the provided track name isn't all too good  todo: fails e.g. for Opeth - Reverie/Harlequin Forest due to mismatch in `/`
+    # Maybe the provided track name isn't all too good
+    # todo: fails e.g. for Opeth - Reverie/Harlequin Forest
+    #  due to mismatch in `/`
+
     # Search for the track on MusicBrainz, and use that info to retry our lib
     if not lib_results:
         mb_candidate = _get_mb_candidate(track_name, artist_name)
@@ -161,12 +165,20 @@ class SetlisterPlugin(BeetsPlugin):
             'api_key': '',
         })
 
-        if not os.path.isdir(os.path.expanduser(self.config['playlist_dir'].get(str))):
+        if not os.path.isdir(
+                os.path.expanduser(
+                    self.config['playlist_dir'].get(str)
+                )
+        ):
             self._log.warning(u'You have to configure a valid `playlist_dir`')
             return
 
         if not self.config['api_key']:
-            self._log.warning(u'You have to provide your setlist.fm API key. Request a key at https://www.setlist.fm/settings/apps and configure it as `api_key` as `api_key`')
+            self._log.warning(
+                u'You have to provide your setlist.fm API key. '
+                u'Request a key at https://www.setlist.fm/settings/apps and '
+                u'configure it as `api_key` as `api_key`'
+            )
             return
 
 
@@ -221,10 +233,13 @@ class SetlisterPlugin(BeetsPlugin):
                                 setlist_name + '.m3u'))
 
         _save_playlist(m3u_path, items)
-        self._log.info(u'Saved playlist at "{0}"'.format(m3u_path.decode('utf-8')))
+        self._log.info(
+            u'Saved playlist at "{0}"'.format(m3u_path.decode('utf-8'))
+        )
 
         if play:
-            # todo: Double check whether this is sensible ~ beets documentation (it probably isn't)
+            # todo: Double check whether this is sensible ~ beets documentation
+            #  (it probably isn't)
             subprocess.Popen(['xdg-open', m3u_path.decode('utf-8')])
 
     def find_items_in_lib(self, lib, track_names, artist_name):
