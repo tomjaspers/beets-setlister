@@ -27,6 +27,8 @@ import beets.autotag.hooks as hooks
 import os
 import requests
 
+import subprocess
+
 
 def _get_best_match(items, track_name, artist_name):
     """ Returns the best match (according to a track_name/artist_name distance)
@@ -67,11 +69,18 @@ def _find_item_in_lib(lib, track_name, artist_name):
     so in that case we query MB and look for the track id and query our
     lib with that.
     """
+
+    # todo: sometimes returns matches by other artists when requested artist
+    # has no matching tracks
+
     # Query the library based on the track name
     query = MatchQuery('title', track_name)
     lib_results = lib._fetch(Item, query=query)
 
     # Maybe the provided track name isn't all too good
+    # todo: fails e.g. for Opeth - Reverie/Harlequin Forest
+    #  due to mismatch in `/`
+
     # Search for the track on MusicBrainz, and use that info to retry our lib
     if not lib_results:
         mb_candidate = _get_mb_candidate(track_name, artist_name)
@@ -102,15 +111,13 @@ def _save_playlist(m3u_path, items):
     mkdirall(m3u_path)
     with open(syspath(m3u_path), 'w') as f:
         for item in items:
-            f.write(item.path + b'\n')
+            f.write(item.path.decode('utf-8') + u'\n')
 
 
-requests_session = requests.Session()
-requests_session.headers = {'User-Agent': 'beets'}
-SETLISTFM_ENDPOINT = 'http://api.setlist.fm/rest/0.1/search/setlists.json'
+# Reference: https://api.setlist.fm/docs/1.0/resource__1.0_search_setlists.html
+SETLISTFM_ENDPOINT = 'https://api.setlist.fm/rest/1.0/search/setlists'
 
-
-def _get_setlist(artist_name, date=None):
+def _get_setlist(session, artist_name, date=None):
     """Query setlist.fm for an artist and return the first
     complete setlist, alongside some information about the event
     """
@@ -119,29 +126,29 @@ def _get_setlist(artist_name, date=None):
     track_names = []
 
     # Query setlistfm using the artist_name
-    response = requests_session.get(SETLISTFM_ENDPOINT, params={
+    response = session.get(SETLISTFM_ENDPOINT, params={
                'artistName': artist_name,
                'date': date,
                })
 
-    if not response.status_code == 200:
+    if not response.status_code == 200: 
         return
 
     # Setlist.fm can have some events with empty setlists
     # We'll just pick the first event with a non-empty setlist
     results = response.json()
-    setlists = results['setlists']['setlist']
+    setlists = results['setlist']
     if not isinstance(setlists, list):
         setlists = [setlists]
     for setlist in setlists:
         sets = setlist['sets']
         if len(sets) > 0:
-            artist_name = setlist['artist']['@name']
-            event_date = setlist['@eventDate']
-            venue_name = setlist['venue']['@name']
+            artist_name = setlist['artist']['name']
+            event_date = setlist['eventDate']
+            venue_name = setlist['venue']['name']
             for subset in sets['set']:
                 for song in subset['song']:
-                    track_names += [song['@name']]
+                    track_names += [song['name']]
             break  # Stop because we have found a setlist
 
     return {'artist_name': artist_name,
@@ -155,14 +162,36 @@ class SetlisterPlugin(BeetsPlugin):
         super(SetlisterPlugin, self).__init__()
         self.config.add({
             'playlist_dir': None,
+            'api_key': '',
         })
 
-    def setlister(self, lib, artist_name, date=None):
+        if not os.path.isdir(
+                os.path.expanduser(
+                    self.config['playlist_dir'].get(str)
+                )
+        ):
+            self._log.warning(u'You have to configure a valid `playlist_dir`')
+            return
+
+        if not self.config['api_key']:
+            self._log.warning(
+                u'You have to provide your setlist.fm API key. '
+                u'Request a key at https://www.setlist.fm/settings/apps and '
+                u'configure it as `api_key` as `api_key`'
+            )
+            return
+
+
+        self.session = requests.Session()
+        self.session.headers = {
+            'Accept': 'application/json',
+            'User-Agent': 'beets',
+            'x-api-key': self.config['api_key'].get(str)
+        }
+
+    def setlister(self, lib, artist_name, date=None, play=False):
         """Glue everything together
         """
-        if not self.config['playlist_dir']:
-            self._log.warning(u'You have to configure a playlist_dir')
-            return
 
         # Support `$ beet setlister red hot chili peppers`
         if isinstance(artist_name, list):
@@ -174,7 +203,7 @@ class SetlisterPlugin(BeetsPlugin):
 
         # Extract setlist information from setlist.fm
         try:
-            setlist = _get_setlist(artist_name, date)
+            setlist = _get_setlist(self.session, artist_name, date)
         except Exception:
             self._log.info(u'error scraping setlist.fm for {0}'.format(
                             artist_name))
@@ -202,8 +231,16 @@ class SetlisterPlugin(BeetsPlugin):
         m3u_path = normpath(os.path.join(
                                 self.config['playlist_dir'].as_filename(),
                                 setlist_name + '.m3u'))
+
         _save_playlist(m3u_path, items)
-        self._log.info(u'Saved playlist at "{0}"'.format(m3u_path))
+        self._log.info(
+            u'Saved playlist at "{0}"'.format(m3u_path.decode('utf-8'))
+        )
+
+        if play:
+            # todo: Double check whether this is sensible ~ beets documentation
+            #  (it probably isn't)
+            subprocess.Popen(['xdg-open', m3u_path.decode('utf-8')])
 
     def find_items_in_lib(self, lib, track_names, artist_name):
         """Returns a list of items found, and list of items not found in library
@@ -224,7 +261,7 @@ class SetlisterPlugin(BeetsPlugin):
 
     def commands(self):
         def func(lib, opts, args):
-            self.setlister(lib, ui.decargs(args), opts.date)
+            self.setlister(lib, ui.decargs(args), opts.date, opts.play)
 
         cmd = ui.Subcommand(
             'setlister',
@@ -232,6 +269,8 @@ class SetlisterPlugin(BeetsPlugin):
         )
         cmd.parser.add_option('-d', '--date', dest='date', default=None,
                               help='setlist of a specific date (dd-MM-yyyy)')
+        cmd.parser.add_option('-p', '--play', action='store_true',
+                              help='play the playlist (boolean)')
 
         cmd.func = func
 
